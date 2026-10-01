@@ -242,12 +242,20 @@ static void syncLoop() {
         g_stats.totalIncoming++;
     }
 
-    // ─── Step 2: Heartbeat ──────────────────────────────────────────────
+    // ─── Step 2: Heartbeat & FOTA Check ─────────────────────────────────
     if (now - g_lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
         g_lastHeartbeat = now;
 
         ApiResponse hbResp = ApiClient::heartbeat(&g_simMgr, &g_stats);
         if (hbResp.success) {
+            // Check for FOTA updates occasionally
+            static uint32_t lastFotaCheck = 0;
+            if (now - lastFotaCheck >= FOTA_CHECK_INTERVAL_MS || lastFotaCheck == 0) {
+                lastFotaCheck = now;
+                // Tokens and base url are stored globally
+                OtaUpdater::checkAndPerformWebUpdate(g_config.apiBase, g_config.token);
+            }
+        }
             LOG_D(TAG, "Heartbeat OK");
         } else {
             LOG_W(TAG, "Heartbeat failed: %s", hbResp.error.c_str());

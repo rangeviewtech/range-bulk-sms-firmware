@@ -88,6 +88,7 @@
 #define BLACKLIST_WINDOW_MS         600000  // 10 minutes failure window
 #define BLACKLIST_RECOVERY_MS       300000  // 5 minutes between recovery probes
 #define WATCHDOG_TIMEOUT_S          30      // Watchdog timeout in seconds
+#define FOTA_CHECK_INTERVAL_MS      86400000 // 24 hours
 
 // ─── Thresholds ─────────────────────────────────────────────────────────────
 #define BLACKLIST_FAIL_THRESHOLD    5       // Failures within window to blacklist
@@ -109,6 +110,7 @@
 #define API_QUEUE           "/device/gateways/queue"
 #define API_RESULT          "/device/gateways/messages/result"
 #define API_INCOMING        "/device/gateways/messages/incoming"
+#define API_FIRMWARE_CHECK  "/device/gateways/firmware/check"
 
 // ─── WiFi AP for Provisioning ───────────────────────────────────────────────
 #define AP_SSID_PREFIX      "RangeGW-"

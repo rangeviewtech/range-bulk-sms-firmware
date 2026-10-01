@@ -57,6 +57,7 @@ bool WifiMgr::begin(DeviceConfig &cfg) {
 
             // Start mDNS
             if (MDNS.begin(hostname.c_str())) {
+                MDNS.addService("http", "tcp", 80);
                 LOG_I(TAG, "mDNS: %s.local", hostname.c_str());
             }
 
@@ -107,6 +108,7 @@ String WifiMgr::startPortal(DeviceConfig &cfg) {
         // Start mDNS
         String hostname = String(OTA_HOSTNAME_PREFIX) + getDeviceSuffix();
         if (MDNS.begin(hostname.c_str())) {
+            MDNS.addService("http", "tcp", 80);
             LOG_I(TAG, "mDNS: %s.local", hostname.c_str());
         }
 

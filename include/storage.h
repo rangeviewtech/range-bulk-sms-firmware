@@ -65,4 +65,5 @@ namespace Storage {
     // ─── Utility ────────────────────────────────────────────────────────
     bool formatFS();
     size_t getFreeSpace();
+    void factoryReset();  // Delete all config/state files (does NOT restart)
 }

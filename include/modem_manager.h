@@ -38,8 +38,13 @@ struct ModemInfo {
     String       imei;
     String       iccid;        // SIM card ID
     String       operatorName;
+    String       phoneNumber;
+    String       networkType;
+    String       registrationStatus; // added for dashboard mapping
+    String       ussdBalance;
     int8_t       signalRSSI;   // Raw CSQ value (0-31, 99=unknown)
     int16_t      signalDbm;    // Converted to dBm
+    uint8_t      signalBars;   // 0-5
     NetRegStatus netStatus;
     bool         simReady;     // SIM card inserted and unlocked
 };
@@ -89,6 +94,12 @@ public:
     bool enableDeliveryReports();     // AT+CSMP to request status reports
     bool setTextMode();               // AT+CMGF=1
     bool deleteAllSMS();              // AT+CMGD=1,4
+
+    // ─── New Features ───────────────────────────────────────────────────
+    String   getPhoneNumber();
+    String   getNetworkType();
+    String   sendUSSD(const String &code);
+    bool     sendMultipartSMS(const String &phone, const String &message);
 
     // ─── Unsolicited Response Handling ──────────────────────────────────
     // Call frequently to process incoming data from modem

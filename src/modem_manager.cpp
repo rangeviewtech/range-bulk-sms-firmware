@@ -422,6 +422,90 @@ IncomingSms ModemManager::getIncomingSms() {
     return sms;
 }
 
+// ─── New Features ─────────────────────────────────────────────────────────
+
+String ModemManager::getPhoneNumber() {
+    AtResult res = sendAT("AT+CNUM", 3000);
+    if (res.ok && res.response.indexOf("+CNUM:") >= 0) {
+        // Parse +CNUM: "","+1234567890",145
+        int q1 = res.response.indexOf("\",\"");
+        if (q1 >= 0) {
+            int q2 = res.response.indexOf("\"", q1 + 3);
+            if (q2 > q1) {
+                return res.response.substring(q1 + 3, q2);
+            }
+        }
+    }
+    return "";
+}
+
+String ModemManager::getNetworkType() {
+    AtResult res = sendAT("AT+COPS?", 3000);
+    // +COPS: 0,0,"MTN",0 -> GSM
+    // Act field: 0=GSM, 2=UTRAN(3G), 7=E-UTRAN(LTE)
+    if (res.ok && res.response.indexOf("+COPS:") >= 0) {
+        int lastComma = res.response.lastIndexOf(',');
+        if (lastComma > 0) {
+            int act = res.response.substring(lastComma + 1).toInt();
+            if (act == 0) return "GSM";
+            if (act == 2) return "3G";
+            if (act == 7) return "LTE";
+        }
+    }
+    return "UNKNOWN";
+}
+
+String ModemManager::sendUSSD(const String &code) {
+    sendAT("AT+CUSD=1,\"" + code + "\",15", 30000);
+    // Wait for +CUSD: URC
+    uint32_t start = millis();
+    while (millis() - start < 30000) {
+        if (_serial->available()) {
+            char c = _serial->read();
+            _urcBuffer += c;
+            if (c == '\n') {
+                _urcBuffer.trim();
+                if (_urcBuffer.startsWith("+CUSD:")) {
+                    // +CUSD: 0,"Balance is N500.00...",15
+                    int q1 = _urcBuffer.indexOf('"');
+                    int q2 = _urcBuffer.lastIndexOf('"');
+                    if (q1 >= 0 && q2 > q1) {
+                        String response = _urcBuffer.substring(q1 + 1, q2);
+                        _urcBuffer = "";
+                        return response;
+                    }
+                }
+                _urcBuffer = "";
+            }
+        }
+        delay(1);
+    }
+    return "";
+}
+
+bool ModemManager::sendMultipartSMS(const String &phone, const String &message) {
+    // Basic fallback: just send as single text if short enough
+    if (message.length() <= 160) {
+        return sendSMS(phone, message).success;
+    }
+    
+    // Simplistic text splitting for now, UDH logic is complex and modem-specific.
+    // For a robust setup, use PDU mode or standard multi-part concat features.
+    // Here we'll just split and send sequentially for basic implementation.
+    int parts = message.length() / SMS_PART_LENGTH + (message.length() % SMS_PART_LENGTH > 0 ? 1 : 0);
+    if (parts > MAX_SMS_PARTS) return false;
+    
+    bool allSuccess = true;
+    for (int i=0; i<parts; i++) {
+        String part = message.substring(i * SMS_PART_LENGTH, (i+1) * SMS_PART_LENGTH);
+        if (!sendSMS(phone, "(Part " + String(i+1) + "/" + String(parts) + ") " + part).success) {
+            allSuccess = false;
+        }
+        delay(1000); // Small pause between parts
+    }
+    return allSuccess;
+}
+
 // ─── Modem Control ──────────────────────────────────────────────────────────
 
 void ModemManager::reset() {

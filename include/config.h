@@ -42,6 +42,40 @@
 // ─── Modem Reset Pin (optional, active LOW) ─────────────────────────────────
 #define MODEM_RST_PIN       4   // Connect to all modem RST pins via transistor
 
+// --- Battery/Power Monitoring ---
+#define BATTERY_ADC_PIN     34    // ADC1 pin for voltage divider
+#define BATTERY_R1          100000.0  // Top resistor (100kΩ)
+#define BATTERY_R2          100000.0  // Bottom resistor (100kΩ)
+#define USB_DETECT_PIN      35    // HIGH when USB 5V present
+
+// --- Ethernet (W5500 SPI, optional) ---
+#define ETH_ENABLED         false   // Set true if W5500 wired
+#define ETH_CS_PIN          5
+#define ETH_MOSI_PIN        23
+#define ETH_MISO_PIN        19
+#define ETH_SCLK_PIN        18
+#define ETH_INT_PIN         -1    // Not used
+#define ETH_RST_PIN         -1    // Not used
+
+// --- Factory Reset Button ---
+#define FACTORY_RESET_PIN   0     // BOOT button on most ESP32 boards
+#define FACTORY_RESET_HOLD_MS 5000 // Hold 5 seconds to factory reset
+
+// --- Web Dashboard ---
+#define WEB_DASHBOARD_PORT  80
+#define WEB_DASHBOARD_ENABLED true
+
+// --- USSD ---
+#define USSD_BALANCE_CODE   "*123#"  // Operator balance check code
+#define USSD_POLL_INTERVAL_MS 3600000 // Check balance every hour
+
+// --- Multi-part SMS ---
+#define MAX_SMS_PARTS       4     // Max concatenated SMS parts
+#define SMS_PART_LENGTH     153   // Characters per part (GSM7 concat)
+
+// --- Temperature ---
+#define TEMP_WARNING_C      70.0  // Warn if internal temp exceeds this
+
 // ─── Timing Constants (milliseconds) ────────────────────────────────────────
 #define HEARTBEAT_INTERVAL_MS       60000   // 60 seconds
 #define QUEUE_POLL_IDLE_MS          15000   // 15 seconds when no jobs

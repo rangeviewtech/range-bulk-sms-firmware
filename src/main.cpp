@@ -27,6 +27,10 @@
 #include "api_client.h"
 #include "ota_updater.h"
 
+#include "power_monitor.h"
+#include "web_dashboard.h"
+#include "ussd_handler.h"
+
 static const char *TAG = "MAIN";
 
 // ─── Global State ───────────────────────────────────────────────────────────
@@ -58,6 +62,30 @@ void setup() {
     printBanner();
 
     g_bootTime = millis();
+
+    // Check factory reset button
+    pinMode(FACTORY_RESET_PIN, INPUT_PULLUP);
+    if (digitalRead(FACTORY_RESET_PIN) == LOW) {
+        LOG_I(TAG, "BOOT button held. Waiting for factory reset...");
+        uint32_t start = millis();
+        bool reset = true;
+        while (millis() - start < FACTORY_RESET_HOLD_MS) {
+            if (digitalRead(FACTORY_RESET_PIN) != LOW) {
+                reset = false;
+                break;
+            }
+            delay(100);
+        }
+        if (reset) {
+            LOG_I(TAG, "Factory reset triggered!");
+            Storage::factoryReset(); // assuming this exists or similar
+            delay(1000);
+            ESP.restart();
+        }
+    }
+
+    // Initialize PowerMonitor
+    PowerMonitor::begin();
 
     // Step 1: Initialize LED
     LedStatus::begin();
@@ -113,6 +141,14 @@ void setup() {
         }
     }
 
+    // Init USSD Handler
+    UssdHandler::begin(&g_simMgr);
+
+    // Start Web Dashboard
+    if (WEB_DASHBOARD_ENABLED) {
+        WebDashboard::begin(&g_simMgr, &g_config, &g_stats);
+    }
+
     // Step 8: Initialize SMS engine
     g_smsEngine = new SmsEngine(g_simMgr);
     g_smsEngine->loadState(); // Restore queued jobs from flash
@@ -147,6 +183,10 @@ void setup() {
 void loop() {
     // Feed watchdog
     esp_task_wdt_reset();
+
+    PowerMonitor::update();
+    WebDashboard::handle();
+    UssdHandler::update();
 
     // Update LED
     LedStatus::update();
@@ -206,12 +246,9 @@ static void syncLoop() {
     if (now - g_lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
         g_lastHeartbeat = now;
 
-        int16_t bestSignal = g_simMgr.getBestSignalDbm();
-        String bestOp = g_simMgr.getBestOperator();
-
-        ApiResponse hbResp = ApiClient::heartbeat(bestSignal, bestOp);
+        ApiResponse hbResp = ApiClient::heartbeat(&g_simMgr, &g_stats);
         if (hbResp.success) {
-            LOG_D(TAG, "Heartbeat OK (signal=%d dBm, op=%s)", bestSignal, bestOp.c_str());
+            LOG_D(TAG, "Heartbeat OK");
         } else {
             LOG_W(TAG, "Heartbeat failed: %s", hbResp.error.c_str());
         }
@@ -384,6 +421,9 @@ static void printBanner() {
 
 static void printStatus() {
     LOG_I(TAG, "────────── STATUS ──────────");
+    LOG_I(TAG, "Power: %s, %.2fV", PowerMonitor::getSourceString(), PowerMonitor::getBatteryVoltage());
+    LOG_I(TAG, "Temp: %.1fC", PowerMonitor::getCpuTemperature());
+    LOG_I(TAG, "WiFi: %s (%d dBm)", WifiMgr::getSSID().c_str(), WifiMgr::getRSSI());
     LOG_I(TAG, "Uptime: %d min", (millis() - g_bootTime) / 60000);
     LOG_I(TAG, "Free Heap: %d bytes", ESP.getFreeHeap());
     LOG_I(TAG, "SIMs: %d active", g_simMgr.getSlotCount());
@@ -394,17 +434,21 @@ static void printStatus() {
 
         const char *healthStr = "?";
         switch (s->health) {
-            case SimHealth::HEALTHY:     healthStr = "HEALTHY"; break;
-            case SimHealth::DEGRADED:    healthStr = "DEGRADED"; break;
-            case SimHealth::BUSY:        healthStr = "BUSY"; break;
-            case SimHealth::DEAD:        healthStr = "DEAD"; break;
-            case SimHealth::BLACKLISTED: healthStr = "BLACKLISTED"; break;
-            default: healthStr = "UNKNOWN"; break;
+            case SimHealth::HEALTHY:     healthStr = "[OK]"; break;
+            case SimHealth::DEGRADED:    healthStr = "[WARN]"; break;
+            case SimHealth::BUSY:        healthStr = "[BUSY]"; break;
+            case SimHealth::DEAD:        healthStr = "[DEAD]"; break;
+            case SimHealth::BLACKLISTED: healthStr = "[BLOCKED]"; break;
+            default: healthStr = "[?]"; break;
         }
+        
+        String bars = "";
+        for (uint8_t b=0; b<s->info.signalBars; b++) bars += "█";
+        for (uint8_t b=s->info.signalBars; b<5; b++) bars += "▂";
 
-        LOG_I(TAG, "  SIM%d: %s | %s | %d dBm | sent=%d fail=%d",
+        LOG_I(TAG, "  SIM%d: %s %s | %s | %s | sent=%d fail=%d",
               i, healthStr, s->info.operatorName.c_str(),
-              s->info.signalDbm, s->totalSent, s->totalFailed);
+              s->info.networkType.c_str(), bars.c_str(), s->totalSent, s->totalFailed);
     }
 
     LOG_I(TAG, "Queue: %d pending", g_smsEngine ? g_smsEngine->pendingCount() : 0);

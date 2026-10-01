@@ -209,3 +209,17 @@ bool Storage::formatFS() {
 size_t Storage::getFreeSpace() {
     return LittleFS.totalBytes() - LittleFS.usedBytes();
 }
+
+void Storage::factoryReset() {
+    LOG_W(TAG, "╔══════════════════════════════════╗");
+    LOG_W(TAG, "║       FACTORY RESET              ║");
+    LOG_W(TAG, "╚══════════════════════════════════╝");
+
+    // Delete all config/state files
+    if (LittleFS.exists(CONFIG_FILE))     LittleFS.remove(CONFIG_FILE);
+    if (LittleFS.exists(QUEUE_FILE))      LittleFS.remove(QUEUE_FILE);
+    if (LittleFS.exists(SIM_STATUS_FILE)) LittleFS.remove(SIM_STATUS_FILE);
+    if (LittleFS.exists(STATS_FILE))      LittleFS.remove(STATS_FILE);
+
+    LOG_W(TAG, "All configuration files deleted. Device will restart unpaired.");
+}

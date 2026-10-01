@@ -294,8 +294,38 @@ void SimManager::update() {
             (now - _slots[i].lastSendTime) > 30000) { // Every 30s if idle
             _slots[i].info.signalDbm = _modems[i].getSignalDbm();
             _slots[i].info.signalRSSI = _modems[i].getSignalQuality();
+            _slots[i].info.signalBars = csqToBars(_slots[i].info.signalRSSI);
+            _slots[i].info.networkType = getNetworkType(i);
+            
+            // Only fetch phone number if empty to save time
+            if (_slots[i].info.phoneNumber.isEmpty()) {
+                _slots[i].info.phoneNumber = getPhoneNumber(i);
+            }
         }
     }
+}
+
+uint8_t SimManager::csqToBars(int8_t csq) {
+    if (csq == 99 || csq < 0) return 0;
+    if (csq >= 20) return 5;
+    if (csq >= 15) return 4;
+    if (csq >= 10) return 3;
+    if (csq >= 5)  return 2;
+    return 1;
+}
+
+String SimManager::getNetworkType(uint8_t slot) {
+    if (slot < _activeSlots && _slots[slot].modem) {
+        return _slots[slot].modem->getNetworkType();
+    }
+    return "UNKNOWN";
+}
+
+String SimManager::getPhoneNumber(uint8_t slot) {
+    if (slot < _activeSlots && _slots[slot].modem) {
+        return _slots[slot].modem->getPhoneNumber();
+    }
+    return "";
 }
 
 // ─── Status Reporting ───────────────────────────────────────────────────────
@@ -361,8 +391,14 @@ void SimManager::toJson(JsonDocument &doc) const {
         obj["slot"] = i;
         obj["health"] = (uint8_t)_slots[i].health;
         obj["operator"] = _slots[i].info.operatorName;
+        obj["networkType"] = _slots[i].info.networkType;
+        obj["phoneNumber"] = _slots[i].info.phoneNumber;
+        obj["registrationStatus"] = _slots[i].info.registrationStatus;
+        obj["ussdBalance"] = _slots[i].info.ussdBalance;
         obj["signalDbm"] = _slots[i].info.signalDbm;
+        obj["signalBars"] = _slots[i].info.signalBars;
         obj["imei"] = _slots[i].info.imei;
+        obj["iccid"] = _slots[i].info.iccid;
         obj["totalSent"] = _slots[i].totalSent;
         obj["totalFailed"] = _slots[i].totalFailed;
         obj["totalDelivered"] = _slots[i].totalDelivered;

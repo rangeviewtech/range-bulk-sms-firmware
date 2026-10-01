@@ -54,6 +54,11 @@ public:
     // Get state of a specific slot
     const SimSlotState* getSlot(uint8_t index) const;
 
+    // Data parsing helpers
+    uint8_t csqToBars(int8_t csq);
+    String  getNetworkType(uint8_t slot);
+    String  getPhoneNumber(uint8_t slot);
+
     // ─── SIM Selection ──────────────────────────────────────────────────
     // Pick the best available SIM for sending (round-robin among healthy)
     // Returns -1 if no SIM is available

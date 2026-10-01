@@ -22,13 +22,17 @@ Production-grade ESP32 firmware that transforms an ESP32 microcontroller into a 
 │  └────┬────┘  │ (AT Cmd) │  └────────────────────────┘ │
 │       │       └────┬─────┘                              │
 │  ┌────┴────┐  ┌────┴─────┐  ┌────────────────────────┐ │
-│  │ Storage │  │ HW UART  │  │ LED Status / OTA       │ │
-│  │ LittleFS│  │ SIM800L/ │  │ Indicators / Updates   │ │
+│  │ Storage │  │ HW UART  │  │ Web Dashboard / OTA    │ │
+│  │ LittleFS│  │ SIM800L/ │  │ V380-style Config UI   │ │
 │  └─────────┘  │ SIM7600  │  └────────────────────────┘ │
 │               └──────────┘                              │
+│  ┌─────────┐  ┌──────────┐  ┌────────────────────────┐ │
+│  │ Power   │  │ USSD     │  │ LED Status             │ │
+│  │ Monitor │  │ Handler  │  │ Indicators             │ │
+│  └─────────┘  └──────────┘  └────────────────────────┘ │
 └──────────────────────────────────────────────────────────┘
          │                     │
-    WiFi (HTTP)          UART (AT Commands)
+    WiFi / Ethernet       UART (AT Commands)
          │                     │
     ┌────┴────┐          ┌─────┴─────┐
     │ Backend │          │ GSM       │
@@ -42,12 +46,14 @@ Production-grade ESP32 firmware that transforms an ESP32 microcontroller into a 
 - Auto-detects connected SIM modules on boot
 - 2 hardware UARTs (SIM800L/SIM7600) built-in
 - Extensible to 10 SIMs via SC16IS752 I2C UART expanders
-- Per-SIM health monitoring and statistics
+- Per-SIM health monitoring, operator name, signal bars, and statistics
+- IMEI, ICCID, phone number readout per SIM
 
 ### Smart SMS Routing
 - Round-robin load distribution across healthy SIMs
 - Automatic failover when a SIM is busy or dead
 - Rate limiting respects backend `maxThroughput` setting
+- Multi-part SMS support for messages > 160 characters
 - Queue persistence survives power loss
 
 ### Line Health Management
@@ -55,7 +61,7 @@ Production-grade ESP32 firmware that transforms an ESP32 microcontroller into a 
 - **Dead Line Detection**: Marks SIMs with no network registration
 - **Auto-Blacklisting**: >5 failures in 10 minutes → blacklisted
 - **Recovery Probing**: Checks blacklisted SIMs every 5 minutes
-- **Admin Unflagging**: Backend can restore blacklisted SIMs
+- **Admin Unflagging**: Backend or web dashboard can restore blacklisted SIMs
 
 ### Delivery Status Monitoring
 - Carrier DLR via `+CDS` status reports
@@ -68,11 +74,60 @@ Production-grade ESP32 firmware that transforms an ESP32 microcontroller into a 
 - Forwards to backend for webhook dispatch
 - Auto-deletes from SIM after forwarding
 
+### Power & Battery Monitoring (NEW)
+- Battery voltage monitoring via ADC with voltage divider
+- USB power detection pin
+- Li-ion percentage mapping (3.0V=0% → 4.2V=100%)
+- ESP32 internal CPU temperature sensor
+- Power source detection: Battery / USB / DC / PoE
+- Reset reason tracking: POWERON, BROWNOUT, WDT, PANIC, etc.
+- Low battery alerts (< 20%)
+
+### Web Dashboard — V380-Style (NEW)
+- Full HTML dashboard at `http://device-ip/`
+- **System card**: Firmware, uptime, heap, CPU temp, reset reason
+- **Power card**: Source, voltage, battery %, charging status
+- **Connectivity card**: WiFi SSID, signal, IP, MAC, API server
+- **Statistics card**: Sent, Delivered, Failed, Incoming counts
+- **SIM card table**: Operator, Network Type (GSM/3G/LTE), Signal Bars (▊▊▊▊▊), Health badge, IMEI, phone, balance, per-SIM send/fail/deliver counts
+- **Admin actions**: Restart, Factory Reset, Unflag SIM
+- JSON API at `/api/status`
+- Auto-refresh every 30 seconds
+- Range View brand colors: Navy #07163D, Yellow #FBCA07, Blue #04648C
+
+### USSD Balance Checking (NEW)
+- Periodic USSD balance query per SIM (`*123#` configurable)
+- Hourly polling interval
+- Balance displayed in dashboard and heartbeat telemetry
+
+### Network Type Detection (NEW)
+- Reads AT+COPS? access technology field
+- Displays GSM / EDGE / 3G / LTE per SIM
+- Included in heartbeat and web dashboard
+
+### Enhanced Heartbeat Telemetry (NEW)
+Rich JSON payload sent to backend every 60 seconds:
+- Power source, battery voltage, charging state
+- WiFi SSID, RSSI, MAC, local IP
+- Firmware version, free heap, CPU temperature
+- Reset reason, uptime
+- Per-SIM detailed array (operator, signal, bars, network type, health, IMEI, ICCID, phone, sent/failed/delivered, USSD balance)
+- Backend returns admin commands (unflag SIMs remotely)
+
+### Factory Reset (NEW)
+- Hold BOOT button for 5 seconds on startup → factory reset
+- Also available from web dashboard and backend
+- Deletes all config, queue, SIM state, and stats
+
 ### WiFi Provisioning
 - First boot: AP mode with captive portal (`RangeGW-XXXX`)
 - Enter WiFi credentials, API URL, and pairing code
 - mDNS: Access at `rangegw-XXXX.local`
 - Exponential backoff WiFi reconnection
+
+### Ethernet Support (Optional)
+- W5500 SPI Ethernet module support (configurable pins)
+- Toggle via `ETH_ENABLED` in config.h
 
 ### System Reliability
 - Hardware watchdog timer (30s)
@@ -80,6 +135,7 @@ Production-grade ESP32 firmware that transforms an ESP32 microcontroller into a 
 - OTA firmware updates via ArduinoOTA
 - Low-memory alerts and heap monitoring
 - LED status indicators for visual feedback
+- Incoming call rejection (`ATH`)
 
 ## 🔧 Hardware Requirements
 
@@ -96,6 +152,12 @@ Production-grade ESP32 firmware that transforms an ESP32 microcontroller into a 
 - Level shifter (SIM800L uses 2.8V logic)
 - Adequate power supply (each SIM800L peaks at 2A during TX)
 
+### Optional Add-ons
+- Battery + voltage divider (100kΩ + 100kΩ) → GPIO 34
+- USB detect wire → GPIO 35
+- W5500 Ethernet module (SPI: GPIO 18/19/23/5)
+- SC16IS752 I2C UART expanders for 3+ SIM slots
+
 ### Pin Connections
 
 | Function | ESP32 Pin | Notes |
@@ -106,8 +168,15 @@ Production-grade ESP32 firmware that transforms an ESP32 microcontroller into a 
 | SIM1 TX  | GPIO 27   | UART2 TX |
 | Status LED | GPIO 2  | Built-in LED |
 | Modem RST | GPIO 4   | Optional, active LOW |
+| Battery ADC | GPIO 34 | ADC1, via voltage divider |
+| USB Detect | GPIO 35  | HIGH when USB 5V present |
+| Factory Reset | GPIO 0 | BOOT button, hold 5s |
 | I2C SDA  | GPIO 21   | For UART expanders |
 | I2C SCL  | GPIO 22   | For UART expanders |
+| ETH CS   | GPIO 5    | W5500 chip select |
+| ETH MOSI | GPIO 23   | W5500 SPI |
+| ETH MISO | GPIO 19   | W5500 SPI |
+| ETH SCLK | GPIO 18   | W5500 SPI |
 
 ## 🚀 Getting Started
 
@@ -144,11 +213,13 @@ pio device monitor
 6. Enter the **pairing code** from your Range View dashboard
 7. The ESP32 will connect to WiFi and register with the backend
 
-### 4. Serial Registration (Alternative)
+### 4. Access the Dashboard
 
-If the captive portal doesn't capture the pairing code, you can enter it via Serial Monitor:
-1. Open Serial Monitor at 115200 baud
-2. When prompted, type the pairing code and press Enter
+After setup, navigate to `http://<device-ip>/` to see:
+- System status, power, connectivity
+- SIM card details with operator, signal bars, network type
+- SMS statistics
+- Admin controls (restart, factory reset, unflag SIM)
 
 ## 📡 Backend API Integration
 
@@ -157,7 +228,7 @@ The firmware integrates with these backend endpoints:
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
 | `/device/gateways/register` | POST | None | Pair device |
-| `/device/gateways/heartbeat` | POST | Bearer | Report status |
+| `/device/gateways/heartbeat` | POST | Bearer | Report rich telemetry |
 | `/device/gateways/queue` | GET | Bearer | Claim SMS jobs |
 | `/device/gateways/messages/result` | POST | Bearer | Report delivery |
 | `/device/gateways/messages/incoming` | POST | Bearer | Forward SMS |
@@ -174,14 +245,6 @@ The firmware integrates with these backend endpoints:
 | Triple blink | AP/Portal mode |
 | Breathing | OTA update in progress |
 
-## 🔄 OTA Updates
-
-The firmware supports ArduinoOTA for wireless updates:
-
-```bash
-pio run --target upload --upload-port rangegw-XXXX.local
-```
-
 ## 📁 Project Structure
 
 ```
@@ -189,24 +252,30 @@ range-bulk-sms-firmware/
 ├── platformio.ini          # Build configuration
 ├── README.md               # This file
 ├── include/
-│   ├── config.h            # Pin definitions, constants, log macros
-│   ├── storage.h           # LittleFS persistence interface
+│   ├── config.h            # Pin defs, constants, thresholds
+│   ├── storage.h           # LittleFS persistence
 │   ├── led_status.h        # LED indicator patterns
-│   ├── modem_manager.h     # Low-level AT command interface
+│   ├── modem_manager.h     # AT command interface
 │   ├── sim_manager.h       # Multi-SIM orchestration
-│   ├── sms_engine.h        # SMS queue and routing engine
+│   ├── sms_engine.h        # SMS queue and routing
 │   ├── api_client.h        # Backend REST API client
 │   ├── wifi_manager.h      # WiFi + captive portal
+│   ├── power_monitor.h     # Battery/power monitoring
+│   ├── web_dashboard.h     # V380-style web UI
+│   ├── ussd_handler.h      # USSD balance checking
 │   └── ota_updater.h       # OTA firmware updates
 ├── src/
-│   ├── main.cpp            # Entry point, boot sequence, sync loop
+│   ├── main.cpp            # Entry point, boot, sync loop
 │   ├── storage.cpp         # LittleFS implementation
-│   ├── led_status.cpp      # LED pattern implementation
+│   ├── led_status.cpp      # LED patterns
 │   ├── modem_manager.cpp   # GSM modem AT commands
 │   ├── sim_manager.cpp     # Multi-SIM health & routing
-│   ├── sms_engine.cpp      # Send queue & delivery tracking
+│   ├── sms_engine.cpp      # Send queue & DLR tracking
 │   ├── api_client.cpp      # HTTP API client
 │   ├── wifi_manager.cpp    # WiFi management
+│   ├── power_monitor.cpp   # Power/battery monitoring
+│   ├── web_dashboard.cpp   # Web dashboard server
+│   ├── ussd_handler.cpp    # USSD balance handler
 │   └── ota_updater.cpp     # ArduinoOTA handler
 ├── data/
 │   └── portal.html         # Captive portal UI

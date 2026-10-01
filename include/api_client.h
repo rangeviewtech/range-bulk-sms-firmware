@@ -52,7 +52,7 @@ namespace ApiClient {
     RegisterResponse registerDevice(const String &baseUrl, const String &pairingCode);
 
     // Send heartbeat with device status
-    ApiResponse heartbeat(int16_t signalDbm, const String &networkOperator);
+    ApiResponse heartbeat(class SimManager* simMgr, struct DeviceStats* stats);
 
     // Fetch queued messages
     QueueResponse fetchQueue(int limit = 10);

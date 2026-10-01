@@ -6,6 +6,8 @@
 #include "config.h"
 #include <HTTPClient.h>
 #include <WiFi.h>
+#include "power_monitor.h"
+#include "sim_manager.h"
 
 static const char *TAG = "API";
 static String _baseUrl;
@@ -128,15 +130,71 @@ RegisterResponse ApiClient::registerDevice(const String &baseUrl, const String &
 }
 
 // ─── Heartbeat ──────────────────────────────────────────────────────────────
-ApiResponse ApiClient::heartbeat(int16_t signalDbm, const String &networkOperator) {
+ApiResponse ApiClient::heartbeat(class SimManager* simMgr, struct DeviceStats* stats) {
     ApiResponse result = { false, "", "", 0 };
 
     JsonDocument doc;
-    // ESP32 typically doesn't have a battery — send null
-    doc["batteryLevel"] = (char*)nullptr;
-    doc["isCharging"] = false;
-    doc["signalStrength"] = signalDbm;
-    doc["networkOperator"] = networkOperator;
+    doc["batteryLevel"] = PowerMonitor::getBatteryPercent();
+    doc["isCharging"] = PowerMonitor::isCharging();
+    doc["signalStrength"] = simMgr ? simMgr->getBestSignalDbm() : -99;
+    doc["networkOperator"] = simMgr ? simMgr->getBestOperator() : "Unknown";
+    doc["powerSource"] = PowerMonitor::getSourceString();
+    doc["batteryVoltage"] = (int)(PowerMonitor::getBatteryVoltage() * 1000); // mV
+    doc["connectivityMethod"] = "WIFI";
+    doc["wifiSSID"] = WiFi.SSID();
+    doc["wifiRSSI"] = WiFi.RSSI();
+    doc["macAddress"] = WiFi.macAddress();
+    doc["localIP"] = WiFi.localIP().toString();
+    doc["firmwareVersion"] = FW_VERSION;
+    doc["freeHeapBytes"] = ESP.getFreeHeap();
+    doc["uptimeSeconds"] = stats ? stats->uptimeSeconds : 0;
+    doc["cpuTempCelsius"] = PowerMonitor::getCpuTemperature();
+    doc["resetReason"] = PowerMonitor::getResetReason();
+    
+    if (simMgr) {
+        doc["simSlotCount"] = simMgr->getSlotCount();
+        JsonArray slots = doc["simSlots"].to<JsonArray>();
+        for (uint8_t i = 0; i < simMgr->getSlotCount(); i++) {
+            const SimSlotState *s = simMgr->getSlot(i);
+            if (!s) continue;
+            JsonObject slotObj = slots.add<JsonObject>();
+            slotObj["slot"] = i;
+            
+            const char* healthStr = "UNKNOWN";
+            switch(s->health) {
+                case SimHealth::HEALTHY: healthStr = "HEALTHY"; break;
+                case SimHealth::DEGRADED: healthStr = "DEGRADED"; break;
+                case SimHealth::BUSY: healthStr = "BUSY"; break;
+                case SimHealth::DEAD: healthStr = "DEAD"; break;
+                case SimHealth::BLACKLISTED: healthStr = "BLACKLISTED"; break;
+                default: break;
+            }
+            slotObj["health"] = healthStr;
+            slotObj["operatorName"] = s->info.operatorName;
+            slotObj["signalDbm"] = s->info.signalDbm;
+            slotObj["signalBars"] = s->info.signalBars;
+            slotObj["networkType"] = s->info.networkType;
+            slotObj["registrationStatus"] = s->info.registrationStatus;
+            slotObj["imei"] = s->info.imei;
+            slotObj["iccid"] = s->info.iccid;
+            slotObj["phoneNumber"] = s->info.phoneNumber;
+            slotObj["totalSent"] = s->totalSent;
+            slotObj["totalFailed"] = s->totalFailed;
+            slotObj["totalDelivered"] = s->totalDelivered;
+            slotObj["ussdBalance"] = s->info.ussdBalance;
+        }
+    } else {
+        doc["simSlotCount"] = 0;
+        doc["simSlots"].to<JsonArray>();
+    }
+    
+    if (stats) {
+        doc["totalSmsSent"] = stats->totalSent;
+        doc["totalSmsDelivered"] = stats->totalDelivered;
+        doc["totalSmsFailed"] = stats->totalFailed;
+        doc["totalSmsIncoming"] = stats->totalIncoming;
+    }
+    doc["pendingQueueSize"] = 0; // Simplified
 
     String body;
     serializeJson(doc, body);
@@ -148,6 +206,19 @@ ApiResponse ApiClient::heartbeat(int16_t signalDbm, const String &networkOperato
         JsonDocument resDoc;
         if (!deserializeJson(resDoc, response)) {
             result.success = resDoc["success"] | false;
+            
+            // Handle unflag commands
+            JsonArray commands = resDoc["commands"].as<JsonArray>();
+            if (simMgr) {
+                for (JsonObject cmd : commands) {
+                    if (cmd["action"] == "UNFLAG_SIM") {
+                        uint8_t slot = cmd["slot"] | 255;
+                        if (slot != 255) {
+                            simMgr->unflag(slot);
+                        }
+                    }
+                }
+            }
         }
     } else {
         result.error = "HTTP " + String(result.httpCode);

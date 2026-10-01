@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Range SMS Gateway Setup</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #07163D;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .card {
+            background: #0d2057;
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 420px;
+            width: 100%;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .logo h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #FBCA07;
+        }
+        .logo p {
+            color: #8899bb;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #8899bb;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            background: #162550;
+            border: 1px solid #2a3f6f;
+            border-radius: 8px;
+            color: #ffffff;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus {
+            border-color: #FBCA07;
+        }
+        input::placeholder { color: #4a5f8f; }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: #FBCA07;
+            color: #07163D;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 8px;
+        }
+        button:hover { background: #e5b800; }
+        .hint {
+            font-size: 12px;
+            color: #5a6f9f;
+            margin-top: 4px;
+        }
+        .divider {
+            height: 1px;
+            background: #2a3f6f;
+            margin: 24px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">
+            <h1>⚡ Range SMS Gateway</h1>
+            <p>ESP32 Hardware Gateway Setup</p>
+        </div>
+        <p style="color: #8899bb; font-size: 14px; margin-bottom: 20px;">
+            Connect to your WiFi network and pair this gateway with your Range View account.
+        </p>
+        <div class="divider"></div>
+        <p style="color: #5a6f9f; font-size: 13px; text-align: center;">
+            WiFi configuration is handled by the system captive portal.<br>
+            Additional settings (API URL, Pairing Code) appear as custom fields.
+        </p>
+    </div>
+</body>
+</html>

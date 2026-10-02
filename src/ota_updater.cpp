@@ -9,6 +9,7 @@
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
 #include <ArduinoJson.h>
+#include "crypto_utils.h"
 
 static const char *TAG = "OTA";
 static bool _updating = false;
@@ -78,6 +79,12 @@ bool checkAndPerformWebUpdate(const String &apiBase, const String &token) {
 
     String requestPayload = String("{\"currentVersion\":\"") + FW_VERSION + "\",\"hardwareModel\":\"" + FW_HARDWARE_MODEL + "\"}";
     
+    if (token.startsWith("gt_")) {
+        String secret = token.substring(3);
+        String encrypted = CryptoUtils::encryptE2EE(requestPayload, secret);
+        requestPayload = String("{\"e2ee\":\"") + encrypted + "\"}";
+    }
+
     int httpCode = http.POST(requestPayload);
     if (httpCode != 200) {
         LOG_W(TAG, "FOTA check failed. HTTP %d", httpCode);
@@ -93,6 +100,18 @@ bool checkAndPerformWebUpdate(const String &apiBase, const String &token) {
     if (err) {
         LOG_E(TAG, "FOTA JSON parse failed: %s", err.c_str());
         return false;
+    }
+
+    if (doc.containsKey("e2ee") && token.startsWith("gt_")) {
+        String secret = token.substring(3);
+        String decrypted = CryptoUtils::decryptE2EE(doc["e2ee"].as<String>(), secret);
+        if (!decrypted.isEmpty()) {
+            err = deserializeJson(doc, decrypted);
+            if (err) {
+                LOG_E(TAG, "FOTA E2EE JSON parse failed: %s", err.c_str());
+                return false;
+            }
+        }
     }
 
     bool updateAvailable = doc["updateAvailable"] | false;

@@ -8,6 +8,7 @@
 #include <WiFi.h>
 #include "power_monitor.h"
 #include "sim_manager.h"
+#include "crypto_utils.h"
 
 static const char *TAG = "API";
 static String _baseUrl;
@@ -48,9 +49,24 @@ static int httpRequest(const String &method, const String &path,
     http.addHeader("Authorization", "Bearer " + _authToken);
     http.setTimeout(15000); // 15 second timeout
 
+    if (method == "GET") {
+        http.addHeader("X-E2EE", "true");
+    }
+
     int httpCode;
     if (method == "POST") {
-        httpCode = http.POST(body);
+        if (!body.isEmpty() && !_authToken.isEmpty() && _authToken.startsWith("gt_")) {
+            String secret = _authToken.substring(3); // strip "gt_"
+            String encrypted = CryptoUtils::encryptE2EE(body, secret);
+            
+            JsonDocument e2eeDoc;
+            e2eeDoc["e2ee"] = encrypted;
+            String e2eeBody;
+            serializeJson(e2eeDoc, e2eeBody);
+            httpCode = http.POST(e2eeBody);
+        } else {
+            httpCode = http.POST(body);
+        }
     } else if (method == "GET") {
         httpCode = http.GET();
     } else {
@@ -59,7 +75,22 @@ static int httpRequest(const String &method, const String &path,
     }
 
     if (httpCode > 0) {
-        response = http.getString();
+        String rawResponse = http.getString();
+        
+        JsonDocument resDoc;
+        DeserializationError err = deserializeJson(resDoc, rawResponse);
+        if (!err && resDoc.containsKey("e2ee") && !_authToken.isEmpty() && _authToken.startsWith("gt_")) {
+            String secret = _authToken.substring(3);
+            String decrypted = CryptoUtils::decryptE2EE(resDoc["e2ee"].as<String>(), secret);
+            if (!decrypted.isEmpty()) {
+                response = decrypted;
+            } else {
+                response = rawResponse; // Fallback
+            }
+        } else {
+            response = rawResponse;
+        }
+        
         LOG_D(TAG, "Response [%d]: %s", httpCode,
               response.length() > 200 ? (response.substring(0, 200) + "...").c_str() : response.c_str());
     } else {

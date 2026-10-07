@@ -253,9 +253,8 @@ static void syncLoop() {
             if (now - lastFotaCheck >= FOTA_CHECK_INTERVAL_MS || lastFotaCheck == 0) {
                 lastFotaCheck = now;
                 // Tokens and base url are stored globally
-                OtaUpdater::checkAndPerformWebUpdate(g_config.apiBase, g_config.token);
+                OtaUpdater::checkAndPerformWebUpdate(g_config.apiBase, g_config.authToken);
             }
-        }
             LOG_D(TAG, "Heartbeat OK");
         } else {
             LOG_W(TAG, "Heartbeat failed: %s", hbResp.error.c_str());
@@ -431,7 +430,7 @@ static void printStatus() {
     LOG_I(TAG, "────────── STATUS ──────────");
     LOG_I(TAG, "Power: %s, %.2fV", PowerMonitor::getSourceString(), PowerMonitor::getBatteryVoltage());
     LOG_I(TAG, "Temp: %.1fC", PowerMonitor::getCpuTemperature());
-    LOG_I(TAG, "WiFi: %s (%d dBm)", WifiMgr::getSSID().c_str(), WifiMgr::getRSSI());
+    LOG_I(TAG, "WiFi: %s (%d dBm)", WiFi.SSID().c_str(), WiFi.RSSI());
     LOG_I(TAG, "Uptime: %d min", (millis() - g_bootTime) / 60000);
     LOG_I(TAG, "Free Heap: %d bytes", ESP.getFreeHeap());
     LOG_I(TAG, "SIMs: %d active", g_simMgr.getSlotCount());

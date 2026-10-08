@@ -13,14 +13,26 @@
 static const char *TAG = "API";
 static String _baseUrl;
 static String _authToken;
+static String _rootCa;
 
-void ApiClient::configure(const String &baseUrl, const String &token) {
+static bool beginVerifiedHttp(HTTPClient &http, const String &url, const String &rootCa) {
+    if (url.startsWith("https://") && !rootCa.isEmpty()) {
+        return http.begin(url, rootCa.c_str());
+    }
+#if ALLOW_INSECURE_HTTP_DEV
+    if (url.startsWith("http://")) return http.begin(url);
+#endif
+    {
+        LOG_E(TAG, "Refusing backend request without HTTPS and a configured root CA");
+        return false;
+    }
+}
+
+void ApiClient::configure(const String &baseUrl, const String &token, const String &rootCa) {
     _baseUrl = baseUrl;
     _authToken = token;
-    LOG_I(TAG, "Configured: base=%s, token=%s...%s",
-          baseUrl.c_str(),
-          token.substring(0, 6).c_str(),
-          token.substring(token.length() - 4).c_str());
+    _rootCa = rootCa;
+    LOG_I(TAG, "Backend client configured; credentials are omitted from logs");
 }
 
 bool ApiClient::isConfigured() {
@@ -40,8 +52,8 @@ static int httpRequest(const String &method, const String &path,
 
     LOG_D(TAG, "%s %s", method.c_str(), url.c_str());
 
-    if (!http.begin(url)) {
-        LOG_E(TAG, "HTTP begin failed");
+    if (!beginVerifiedHttp(http, url, _rootCa)) {
+        LOG_E(TAG, "Verified HTTPS connection could not be initialized");
         return -1;
     }
 
@@ -91,8 +103,7 @@ static int httpRequest(const String &method, const String &path,
             response = rawResponse;
         }
         
-        LOG_D(TAG, "Response [%d]: %s", httpCode,
-              response.length() > 200 ? (response.substring(0, 200) + "...").c_str() : response.c_str());
+        LOG_D(TAG, "Response [%d] received (%u bytes)", httpCode, response.length());
     } else {
         LOG_E(TAG, "HTTP error: %s", http.errorToString(httpCode).c_str());
         response = "";
@@ -103,7 +114,7 @@ static int httpRequest(const String &method, const String &path,
 }
 
 // ─── Register (no auth token yet) ───────────────────────────────────────────
-RegisterResponse ApiClient::registerDevice(const String &baseUrl, const String &pairingCode) {
+RegisterResponse ApiClient::registerDevice(const String &baseUrl, const String &pairingCode, const String &rootCa) {
     RegisterResponse result = { false, "", "", "" };
 
     if (WiFi.status() != WL_CONNECTED) {
@@ -114,8 +125,8 @@ RegisterResponse ApiClient::registerDevice(const String &baseUrl, const String &
     HTTPClient http;
     String url = baseUrl + API_REGISTER;
 
-    if (!http.begin(url)) {
-        result.error = "HTTP begin failed";
+    if (!beginVerifiedHttp(http, url, rootCa)) {
+        result.error = "Secure HTTPS connection requires the backend root CA certificate";
         return result;
     }
 
@@ -131,7 +142,7 @@ RegisterResponse ApiClient::registerDevice(const String &baseUrl, const String &
     String body;
     serializeJson(doc, body);
 
-    LOG_I(TAG, "Registering with pairing code: %s", pairingCode.c_str());
+    LOG_I(TAG, "Registering gateway with pairing code");
     int httpCode = http.POST(body);
 
     if (httpCode == 200) {

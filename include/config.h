@@ -104,7 +104,12 @@
 #define STATS_FILE          "/stats.json"
 
 // ─── API Defaults ───────────────────────────────────────────────────────────
-#define DEFAULT_API_BASE    "http://192.168.1.100:3000/api/v1"
+#define DEFAULT_API_BASE    ""
+// Enable plain HTTP only in explicitly local development builds. Production
+// devices must validate HTTPS with the configured backend root CA.
+#ifndef ALLOW_INSECURE_HTTP_DEV
+#define ALLOW_INSECURE_HTTP_DEV 0
+#endif
 #define API_REGISTER        "/device/gateways/register"
 #define API_HEARTBEAT       "/device/gateways/heartbeat"
 #define API_QUEUE           "/device/gateways/queue"

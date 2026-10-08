@@ -45,6 +45,8 @@ bool Storage::loadConfig(DeviceConfig &cfg) {
     if (raw.isEmpty()) {
         LOG_W(TAG, "No config file found, using defaults");
         cfg.apiBase = DEFAULT_API_BASE;
+        cfg.apiRootCa = "";
+        cfg.pairingCode = "";
         cfg.paired = false;
         return false;
     }
@@ -54,16 +56,25 @@ bool Storage::loadConfig(DeviceConfig &cfg) {
     if (err) {
         LOG_E(TAG, "Config parse error: %s", err.c_str());
         cfg.apiBase = DEFAULT_API_BASE;
+        cfg.apiRootCa = "";
+        cfg.pairingCode = "";
         cfg.paired = false;
         return false;
     }
 
     cfg.apiBase      = doc["apiBase"]      | DEFAULT_API_BASE;
+    cfg.apiRootCa    = doc["apiRootCa"]    | "";
     cfg.gatewayId    = doc["gatewayId"]    | "";
     cfg.authToken    = doc["authToken"]    | "";
     cfg.wifiSsid     = doc["wifiSsid"]    | "";
     cfg.wifiPassword = doc["wifiPassword"] | "";
+    cfg.pairingCode  = doc["pairingCode"] | "";
     cfg.paired       = doc["paired"]       | false;
+
+    // Migrate devices off the old development-only private LAN default.
+    if (cfg.apiBase == "http://192.168.1.100:3000/api/v1") {
+        cfg.apiBase = DEFAULT_API_BASE;
+    }
 
     LOG_I(TAG, "Config loaded. Paired: %s, Gateway: %s",
           cfg.paired ? "yes" : "no", cfg.gatewayId.c_str());
@@ -73,10 +84,12 @@ bool Storage::loadConfig(DeviceConfig &cfg) {
 bool Storage::saveConfig(const DeviceConfig &cfg) {
     JsonDocument doc;
     doc["apiBase"]      = cfg.apiBase;
+    doc["apiRootCa"]    = cfg.apiRootCa;
     doc["gatewayId"]    = cfg.gatewayId;
     doc["authToken"]    = cfg.authToken;
     doc["wifiSsid"]     = cfg.wifiSsid;
     doc["wifiPassword"] = cfg.wifiPassword;
+    doc["pairingCode"]  = cfg.pairingCode;
     doc["paired"]       = cfg.paired;
 
     String output;

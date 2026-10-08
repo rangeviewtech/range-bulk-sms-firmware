@@ -44,12 +44,12 @@ struct ApiResponse {
 
 namespace ApiClient {
     // Configure the client with base URL and auth token
-    void configure(const String &baseUrl, const String &token);
+    void configure(const String &baseUrl, const String &token, const String &rootCa);
 
     // ─── Endpoints ──────────────────────────────────────────────────────
 
     // Register device with pairing code (no auth token needed yet)
-    RegisterResponse registerDevice(const String &baseUrl, const String &pairingCode);
+    RegisterResponse registerDevice(const String &baseUrl, const String &pairingCode, const String &rootCa);
 
     // Send heartbeat with device status
     ApiResponse heartbeat(class SimManager* simMgr, struct DeviceStats* stats);

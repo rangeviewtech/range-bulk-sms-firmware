@@ -66,14 +66,17 @@ bool isUpdating() {
     return _updating;
 }
 
-bool checkAndPerformWebUpdate(const String &apiBase, const String &token) {
-    if (apiBase.isEmpty() || token.isEmpty()) return false;
+bool checkAndPerformWebUpdate(const String &apiBase, const String &token, const String &rootCa) {
+    if (apiBase.isEmpty() || token.isEmpty() || rootCa.isEmpty() || !apiBase.startsWith("https://")) return false;
 
     String url = apiBase + API_FIRMWARE_CHECK;
     LOG_I(TAG, "Checking for Internet FOTA at: %s", url.c_str());
 
     HTTPClient http;
-    http.begin(url);
+    if (!http.begin(url, rootCa.c_str())) {
+        LOG_E(TAG, "Refusing FOTA check without verified HTTPS");
+        return false;
+    }
     http.addHeader("Authorization", "Bearer " + token);
     http.addHeader("Content-Type", "application/json");
 
@@ -126,6 +129,10 @@ bool checkAndPerformWebUpdate(const String &apiBase, const String &token) {
         LOG_E(TAG, "FOTA update available but no download URL provided.");
         return false;
     }
+    if (!downloadUrl.startsWith("https://") || downloadUrl.indexOf('@') >= 0) {
+        LOG_E(TAG, "Refusing firmware URL that is not a credential-free HTTPS URL");
+        return false;
+    }
 
     LOG_I(TAG, "FOTA Update found! Version: %s. Starting download...", newVersion.c_str());
     _updating = true;
@@ -137,9 +144,13 @@ bool checkAndPerformWebUpdate(const String &apiBase, const String &token) {
 
     // Prepare HTTPClient for download
     HTTPClient downloadHttp;
-    downloadHttp.begin(downloadUrl);
-    // Optional: add auth header if the binary requires it
-    downloadHttp.addHeader("Authorization", "Bearer " + token);
+    if (!downloadHttp.begin(downloadUrl, rootCa.c_str())) {
+        LOG_E(TAG, "Refusing firmware download without verified HTTPS");
+        _updating = false;
+        return false;
+    }
+    // The download URL must be public or short-lived and signed. Never send
+    // the device bearer token to a storage/CDN host returned by the backend.
 
     t_httpUpdate_return ret = httpUpdate.update(downloadHttp);
 

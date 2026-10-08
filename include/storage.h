@@ -9,10 +9,12 @@
 // ─── Device Configuration (persisted in /config.json) ───────────────────────
 struct DeviceConfig {
     String apiBase;       // Backend API base URL
+    String apiRootCa;     // PEM root CA; line breaks may be entered as \\n
     String gatewayId;     // Assigned gateway UUID
     String authToken;     // Bearer token (gt_xxxx)
     String wifiSsid;      // WiFi SSID
     String wifiPassword;  // WiFi password
+    String pairingCode;   // Short-lived pairing code captured during provisioning
     bool   paired;        // True if registration completed
 };
 

@@ -8,6 +8,7 @@
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <ESPmDNS.h>
+#include <time.h>
 
 static const char *TAG = "WIFI";
 static uint32_t _reconnectDelay = WIFI_RECONNECT_MIN_MS;
@@ -18,6 +19,17 @@ static String   _pairingCode; // Captured from portal
 // Custom parameter for pairing code and API URL
 static WiFiManagerParameter *_paramPairingCode = nullptr;
 static WiFiManagerParameter *_paramApiUrl = nullptr;
+static WiFiManagerParameter *_paramApiRootCa = nullptr;
+
+static bool syncSystemClock() {
+    configTime(0, 0, "pool.ntp.org", "time.google.com");
+    for (uint8_t attempt = 0; attempt < 20; attempt++) {
+        if (time(nullptr) > 1'700'000'000) return true;
+        delay(500);
+    }
+    LOG_W(TAG, "NTP time sync failed; verified TLS connections may be unavailable");
+    return false;
+}
 
 String WifiMgr::getDeviceSuffix() {
     if (_deviceSuffix.isEmpty()) {
@@ -62,7 +74,19 @@ bool WifiMgr::begin(DeviceConfig &cfg) {
             }
 
             _reconnectDelay = WIFI_RECONNECT_MIN_MS;
-            return true;
+            if (!cfg.apiBase.isEmpty() && cfg.apiBase.startsWith("https://") &&
+                cfg.apiRootCa.startsWith("-----BEGIN CERTIFICATE-----") &&
+                cfg.apiRootCa.endsWith("-----END CERTIFICATE-----")) {
+                syncSystemClock();
+                return true;
+            }
+#if ALLOW_INSECURE_HTTP_DEV
+            if (!cfg.apiBase.isEmpty() && cfg.apiBase.startsWith("http://")) {
+                syncSystemClock();
+                return true;
+            }
+#endif
+            LOG_W(TAG, "Verified backend URL or trusted root CA is missing; opening setup portal");
         }
 
         LOG_W(TAG, "Failed to connect to saved WiFi");
@@ -70,7 +94,9 @@ bool WifiMgr::begin(DeviceConfig &cfg) {
 
     // No saved credentials or failed — start portal
     LOG_I(TAG, "Starting captive portal...");
-    String portalCode = startPortal(cfg);
+    startPortal(cfg);
+
+    if (WiFi.status() == WL_CONNECTED) syncSystemClock();
 
     return WiFi.status() == WL_CONNECTED;
 }
@@ -83,8 +109,10 @@ String WifiMgr::startPortal(DeviceConfig &cfg) {
 
     // Add custom parameters
     _paramApiUrl = new WiFiManagerParameter("apiurl", "API Server URL", cfg.apiBase.c_str(), 128);
+    _paramApiRootCa = new WiFiManagerParameter("apica", "Backend Root CA PEM (single line; use \\n for line breaks)", cfg.apiRootCa.c_str(), 2048);
     _paramPairingCode = new WiFiManagerParameter("pairing", "Pairing Code", "", 32);
     wm.addParameter(_paramApiUrl);
+    wm.addParameter(_paramApiRootCa);
     wm.addParameter(_paramPairingCode);
 
     String apName = String(AP_SSID_PREFIX) + getDeviceSuffix();
@@ -98,12 +126,38 @@ String WifiMgr::startPortal(DeviceConfig &cfg) {
         cfg.wifiSsid = WiFi.SSID();
         cfg.wifiPassword = WiFi.psk();
         cfg.apiBase = String(_paramApiUrl->getValue());
-        if (cfg.apiBase.isEmpty()) cfg.apiBase = DEFAULT_API_BASE;
+        cfg.apiBase.trim();
+        while (cfg.apiBase.endsWith("/")) cfg.apiBase.remove(cfg.apiBase.length() - 1);
+        if (!cfg.apiBase.isEmpty() && !cfg.apiBase.endsWith("/api/v1")) {
+            cfg.apiBase += "/api/v1";
+        }
+        if (!cfg.apiBase.startsWith("https://") && !cfg.apiBase.startsWith("http://")) {
+            LOG_E(TAG, "Backend URL must start with https://");
+            cfg.apiBase = "";
+        }
+
+        cfg.apiRootCa = String(_paramApiRootCa->getValue());
+        cfg.apiRootCa.trim();
+        cfg.apiRootCa.replace("\\n", "\n");
+        if (cfg.apiBase.startsWith("https://") &&
+            (!cfg.apiRootCa.startsWith("-----BEGIN CERTIFICATE-----") ||
+             !cfg.apiRootCa.endsWith("-----END CERTIFICATE-----"))) {
+            LOG_E(TAG, "HTTPS backend requires its trusted root CA certificate; secure API calls will fail closed");
+            cfg.apiBase = "";
+        }
+#if !ALLOW_INSECURE_HTTP_DEV
+        if (cfg.apiBase.startsWith("http://")) {
+            LOG_E(TAG, "Plain HTTP is disabled; configure an HTTPS backend and trusted root CA");
+            cfg.apiBase = "";
+        }
+#endif
 
         _pairingCode = String(_paramPairingCode->getValue());
+        _pairingCode.trim();
+        cfg.pairingCode = _pairingCode;
 
-        LOG_I(TAG, "Portal complete. SSID=%s, API=%s, Code=%s",
-              cfg.wifiSsid.c_str(), cfg.apiBase.c_str(), _pairingCode.c_str());
+        LOG_I(TAG, "Portal complete. WiFi configured; backend URL %s",
+              cfg.apiBase.isEmpty() ? "is missing or invalid" : "configured");
 
         // Start mDNS
         String hostname = String(OTA_HOSTNAME_PREFIX) + getDeviceSuffix();
@@ -123,8 +177,10 @@ String WifiMgr::startPortal(DeviceConfig &cfg) {
     // Cleanup
     delete _paramApiUrl;
     delete _paramPairingCode;
+    delete _paramApiRootCa;
     _paramApiUrl = nullptr;
     _paramPairingCode = nullptr;
+    _paramApiRootCa = nullptr;
 
     return _pairingCode;
 }

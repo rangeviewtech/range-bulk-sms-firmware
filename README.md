@@ -209,7 +209,9 @@ pio device monitor
 2. Connect to the AP with your phone/computer
 3. The captive portal will open automatically
 4. Enter your WiFi credentials
-5. Enter the API server URL (default: `http://192.168.1.100:3000/api/v1`)
+5. Enter the web app API URL. Use the deployed web app origin in production
+   (HTTPS required); local development must use a host address reachable by
+   the ESP32. `/api/v1` is added automatically if omitted.
 6. Enter the **pairing code** from your Range View dashboard
 7. The ESP32 will connect to WiFi and register with the backend
 
@@ -222,6 +224,19 @@ After setup, navigate to `http://<device-ip>/` to see:
 - Admin controls (restart, factory reset, unflag SIM)
 
 ## 📡 Backend API Integration
+
+The firmware connects directly to the same Next.js web backend used by the
+mobile and Android gateway apps. It uses the `API Server URL` entered in the
+provisioning portal; no Redis credentials belong on the device. Production
+connections must use HTTPS.
+The provisioning portal also requires the trusted root CA certificate for the
+backend's TLS certificate. Paste the PEM certificate as one line, replacing each
+line break with the two characters `\n`; the device restores the line breaks
+before saving. Pairing and all device traffic fail closed if the CA is missing.
+Do not put the backend token or Redis credentials in the portal's API URL or CA
+field. The firmware update checker stays disabled until the web backend has
+`ESP32_FIRMWARE_VERSION` and `ESP32_FIRMWARE_DOWNLOAD_URL` configured to a real
+HTTPS artifact.
 
 The firmware integrates with these backend endpoints:
 

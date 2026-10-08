@@ -18,5 +18,5 @@ namespace OtaUpdater {
 
     // Perform an Internet FOTA update check
     // Returns true if an update was triggered and system is restarting
-    bool checkAndPerformWebUpdate(const String &apiBase, const String &token);
+    bool checkAndPerformWebUpdate(const String &apiBase, const String &token, const String &rootCa);
 }

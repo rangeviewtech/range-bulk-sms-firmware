@@ -115,13 +115,20 @@ void setup() {
     }
 
     // Step 5: Register if not paired
-    if (WifiMgr::isConnected() && !g_config.paired) {
-        doRegistration();
+    if (WifiMgr::isConnected()) {
+        Storage::saveConfig(g_config);
+        if (!g_config.paired) {
+            if (!g_config.apiBase.isEmpty()) {
+                doRegistration();
+            } else {
+                LOG_E(TAG, "Set the web app API URL in the setup portal before pairing");
+            }
+        }
     }
 
     // Step 6: Configure API client
     if (g_config.paired) {
-        ApiClient::configure(g_config.apiBase, g_config.authToken);
+        ApiClient::configure(g_config.apiBase, g_config.authToken, g_config.apiRootCa);
     }
 
     // Step 7: Detect SIM modules
@@ -253,7 +260,7 @@ static void syncLoop() {
             if (now - lastFotaCheck >= FOTA_CHECK_INTERVAL_MS || lastFotaCheck == 0) {
                 lastFotaCheck = now;
                 // Tokens and base url are stored globally
-                OtaUpdater::checkAndPerformWebUpdate(g_config.apiBase, g_config.authToken);
+                OtaUpdater::checkAndPerformWebUpdate(g_config.apiBase, g_config.authToken, g_config.apiRootCa);
             }
             LOG_D(TAG, "Heartbeat OK");
         } else {
@@ -335,18 +342,7 @@ static void doRegistration() {
     // WiFiManager stores this in the config.apiBase flow
     // We'll read from a special field or re-prompt via serial
 
-    String pairingCode;
-
-    // Try to get from config (set during portal)
-    JsonDocument configDoc;
-    String raw;
-    File f = LittleFS.open(CONFIG_FILE, "r");
-    if (f) {
-        raw = f.readString();
-        f.close();
-        deserializeJson(configDoc, raw);
-        pairingCode = configDoc["pairingCode"] | "";
-    }
+    String pairingCode = g_config.pairingCode;
 
     if (pairingCode.isEmpty()) {
         // Prompt via Serial
@@ -376,20 +372,21 @@ static void doRegistration() {
         return;
     }
 
-    LOG_I(TAG, "Registering with code: %s", pairingCode.c_str());
+    LOG_I(TAG, "Registering gateway with the configured backend...");
 
-    RegisterResponse resp = ApiClient::registerDevice(g_config.apiBase, pairingCode);
+    RegisterResponse resp = ApiClient::registerDevice(g_config.apiBase, pairingCode, g_config.apiRootCa);
 
     if (resp.success) {
         g_config.gatewayId = resp.gatewayId;
         g_config.authToken = resp.token;
         g_config.paired = true;
+        g_config.pairingCode = "";
 
         // Save to flash
         Storage::saveConfig(g_config);
 
         // Configure API client with new token
-        ApiClient::configure(g_config.apiBase, g_config.authToken);
+        ApiClient::configure(g_config.apiBase, g_config.authToken, g_config.apiRootCa);
 
         LOG_I(TAG, "╔══════════════════════════════════════════╗");
         LOG_I(TAG, "║  REGISTRATION SUCCESSFUL!                ║");

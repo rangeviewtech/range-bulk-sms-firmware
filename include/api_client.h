@@ -8,6 +8,8 @@
 #include "storage.h"
 #include <vector>
 
+class SimManager;
+
 // Response from queue endpoint
 struct QueuedMessage {
     String attemptId;
@@ -52,7 +54,7 @@ namespace ApiClient {
     RegisterResponse registerDevice(const String &baseUrl, const String &pairingCode, const String &rootCa);
 
     // Send heartbeat with device status
-    ApiResponse heartbeat(class SimManager* simMgr, struct DeviceStats* stats);
+    ApiResponse heartbeat(::SimManager* simMgr, DeviceStats* stats);
 
     // Fetch queued messages
     QueueResponse fetchQueue(int limit = 10);

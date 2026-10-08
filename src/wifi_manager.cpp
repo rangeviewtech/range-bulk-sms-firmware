@@ -24,7 +24,7 @@ static WiFiManagerParameter *_paramApiRootCa = nullptr;
 static bool syncSystemClock() {
     configTime(0, 0, "pool.ntp.org", "time.google.com");
     for (uint8_t attempt = 0; attempt < 20; attempt++) {
-        if (time(nullptr) > 1'700'000'000) return true;
+        if (time(nullptr) > 1700000000) return true;
         delay(500);
     }
     LOG_W(TAG, "NTP time sync failed; verified TLS connections may be unavailable");

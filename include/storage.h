@@ -5,6 +5,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <vector>
 
 // ─── Device Configuration (persisted in /config.json) ───────────────────────
 struct DeviceConfig {

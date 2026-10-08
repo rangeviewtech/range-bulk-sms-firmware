@@ -61,7 +61,7 @@ Production-grade ESP32 firmware that transforms an ESP32 microcontroller into a 
 - **Dead Line Detection**: Marks SIMs with no network registration
 - **Auto-Blacklisting**: >5 failures in 10 minutes → blacklisted
 - **Recovery Probing**: Checks blacklisted SIMs every 5 minutes
-- **Admin Unflagging**: Backend or web dashboard can restore blacklisted SIMs
+- **Admin Unflagging**: Only backend-issued commands can restore blacklisted SIMs
 
 ### Delivery Status Monitoring
 - Carrier DLR via `+CDS` status reports
@@ -90,7 +90,7 @@ Production-grade ESP32 firmware that transforms an ESP32 microcontroller into a 
 - **Connectivity card**: WiFi SSID, signal, IP, MAC, API server
 - **Statistics card**: Sent, Delivered, Failed, Incoming counts
 - **SIM card table**: Operator, Network Type (GSM/3G/LTE), Signal Bars (▊▊▊▊▊), Health badge, IMEI, phone, balance, per-SIM send/fail/deliver counts
-- **Admin actions**: Restart, Factory Reset, Unflag SIM
+- **Read-only status dashboard**: Messaging, SIM recovery, and account actions are managed by the authenticated Range API. Factory reset requires the physical BOOT button.
 - JSON API at `/api/status`
 - Auto-refresh every 30 seconds
 - Range View brand colors: Navy #07163D, Yellow #FBCA07, Blue #04648C
@@ -116,7 +116,6 @@ Rich JSON payload sent to backend every 60 seconds:
 
 ### Factory Reset (NEW)
 - Hold BOOT button for 5 seconds on startup → factory reset
-- Also available from web dashboard and backend
 - Deletes all config, queue, SIM state, and stats
 
 ### WiFi Provisioning
@@ -221,7 +220,10 @@ After setup, navigate to `http://<device-ip>/` to see:
 - System status, power, connectivity
 - SIM card details with operator, signal bars, network type
 - SMS statistics
-- Admin controls (restart, factory reset, unflag SIM)
+
+The device dashboard is read-only. Messaging, gateway recovery, and SIM
+administration are managed through the authenticated Range API. Factory reset
+requires the physical BOOT button.
 
 ## 📡 Backend API Integration
 
@@ -247,6 +249,12 @@ The firmware integrates with these backend endpoints:
 | `/device/gateways/queue` | GET | Bearer | Claim SMS jobs |
 | `/device/gateways/messages/result` | POST | Bearer | Report delivery |
 | `/device/gateways/messages/incoming` | POST | Bearer | Forward SMS |
+
+The API owns campaign validation, pricing, wallet changes, per-recipient
+attempts, status aggregation, and retry decisions. Firmware owns modem
+communication and device-level behavior; it performs low-level AT command
+retries, reports one attempt outcome, and waits for the API to issue a new
+attempt ID before sending again. Uncertain sends are not automatically retried.
 
 ## 📊 LED Status Indicators
 

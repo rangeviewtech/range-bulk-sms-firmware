@@ -166,13 +166,7 @@ input, select { background: #162550; color: white; border: 1px solid #4a5f8f; pa
                 html += "<td>" + String(slot->totalSent) + "</td>";
                 html += "<td>" + String(slot->totalFailed) + "</td>";
                 html += "<td>" + String(slot->totalDelivered) + "</td>";
-                html += "<td>";
-                if (slot->health == SimHealth::BLACKLISTED || slot->health == SimHealth::DEAD) {
-                    html += "<button class='btn btn-sm' onclick=\"fetch('/api/unflag-sim?slot=" + String(i) + "',{method:'POST'}).then(()=>location.reload())\">Unflag</button>";
-                } else {
-                    html += "<span style='color:#4a5f8f'>—</span>";
-                }
-                html += "</td></tr>";
+                html += "<td><span style='color:#4a5f8f'>Managed by Range API</span></td></tr>";
             }
             html += "</table></div>";
         } else {
@@ -180,88 +174,18 @@ input, select { background: #162550; color: white; border: 1px solid #4a5f8f; pa
         }
         html += "</div>";
 
-        // ─── Diagnostics (Interactive) ───────────────────────────────────
-        html += "<div class='grid'><div class='card'><h2>📱 Dial USSD</h2>";
-        html += "<div class='form-group'><label>Select SIM Slot</label><select id='ussd-slot'>";
-        if (_simMgr) {
-            for (uint8_t i = 0; i < _simMgr->getSlotCount(); i++) {
-                html += "<option value='" + String(i) + "'>Slot " + String(i) + " - " + _simMgr->getSlot(i)->info.operatorName + "</option>";
-            }
-        }
-        html += "</select></div>";
-        html += "<div class='form-group'><label>USSD Code (e.g. *123#)</label><input type='text' id='ussd-code' placeholder='*123#'></div>";
-        html += "<button class='btn' onclick='runUssd()'>Dial Code</button>";
-        html += "<div class='result-box' id='ussd-result'>Ready</div>";
-        html += "</div>";
+        // Hardware SMS, USSD, reset, and recovery operations are not exposed
+        // on this unauthenticated local dashboard. Business actions must use
+        // authenticated Range APIs; factory reset remains a physical action.
+        html += "<div class='card'><h2>🔧 Device Controls</h2>";
+        html += "<p>Messaging and gateway recovery are managed through the Range application.</p>";
+        html += "<p>For a factory reset, use the physical BOOT button during startup.</p>";
+        html += "<button class='btn' onclick=\"location.reload()\">🔄 Refresh</button></div>";
 
-        html += "<div class='card'><h2>✉️ Send Test SMS</h2>";
-        html += "<div class='form-group'><label>Select SIM Slot</label><select id='sms-slot'>";
-        if (_simMgr) {
-            for (uint8_t i = 0; i < _simMgr->getSlotCount(); i++) {
-                html += "<option value='" + String(i) + "'>Slot " + String(i) + " - " + _simMgr->getSlot(i)->info.operatorName + "</option>";
-            }
-        }
-        html += "</select></div>";
-        html += "<div class='form-group'><label>Phone Number</label><input type='text' id='sms-phone' placeholder='+1234567890'></div>";
-        html += "<div class='form-group'><label>Message</label><input type='text' id='sms-msg' placeholder='Hello from Range Gateway!'></div>";
-        html += "<button class='btn' onclick='sendSms()'>Send SMS</button>";
-        html += "<div class='result-box' id='sms-result'>Ready</div>";
-        html += "</div></div>";
-
-        // ─── Actions ─────────────────────────────────────────────────────
-        html += "<div class='card'><h2>🔧 Device Actions</h2>";
-        html += "<div style='display:flex;gap:12px;flex-wrap:wrap'>";
-        html += "<button class='btn' onclick=\"location.reload()\">🔄 Refresh</button>";
-        html += "<button class='btn' onclick=\"if(confirm('Restart the gateway?'))fetch('/api/restart',{method:'POST'}).then(()=>setTimeout(()=>location.reload(), 5000))\">⟳ Restart</button>";
-        html += "<button class='btn btn-danger' onclick=\"if(confirm('⚠️ This will erase all settings and unpair the device. Are you sure?'))fetch('/api/factory-reset',{method:'POST'}).then(()=>setTimeout(()=>location.reload(), 5000))\">🗑 Factory Reset</button>";
-        html += "</div></div>";
-
-        // Scripts for interactive tools
+        // Dashboard refresh only; control actions are handled through the backend.
         html += R"html(
 <script>
-let autoRefresh = setTimeout(()=>location.reload(),30000);
-function pauseRefresh() { clearTimeout(autoRefresh); }
-
-async function runUssd() {
-    pauseRefresh();
-    const slot = document.getElementById('ussd-slot').value;
-    const code = document.getElementById('ussd-code').value;
-    const res = document.getElementById('ussd-result');
-    if (!code) { res.innerText = 'Please enter a code'; return; }
-    res.innerText = 'Dialing... Please wait.';
-    try {
-        const response = await fetch('/api/ussd', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: `slot=${slot}&code=${encodeURIComponent(code)}`
-        });
-        const data = await response.json();
-        res.innerText = data.response || data.error || 'No response';
-    } catch(e) { res.innerText = 'Error: ' + e; }
-}
-
-async function sendSms() {
-    pauseRefresh();
-    const slot = document.getElementById('sms-slot').value;
-    const phone = document.getElementById('sms-phone').value;
-    const msg = document.getElementById('sms-msg').value;
-    const res = document.getElementById('sms-result');
-    if (!phone || !msg) { res.innerText = 'Please enter phone and message'; return; }
-    res.innerText = 'Sending... Please wait.';
-    try {
-        const response = await fetch('/api/send-sms', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: `slot=${slot}&phone=${encodeURIComponent(phone)}&message=${encodeURIComponent(msg)}`
-        });
-        const data = await response.json();
-        if (data.success) {
-            res.innerText = `Sent successfully! Reference: ${data.reference}`;
-        } else {
-            res.innerText = `Failed: ${data.error || 'Unknown error'}`;
-        }
-    } catch(e) { res.innerText = 'Error: ' + e; }
-}
+setTimeout(() => location.reload(), 30000);
 </script>
 )html";
 
@@ -322,108 +246,6 @@ async function sendSms() {
         server.send(200, "application/json", json);
     }
 
-    // ─── POST /api/ussd (Interactive) ────────────────────────────────────
-    static void handleApiUssd() {
-        if (!server.hasArg("slot") || !server.hasArg("code")) {
-            server.send(400, "application/json", "{\"error\":\"Missing slot or code\"}");
-            return;
-        }
-        uint8_t slot = server.arg("slot").toInt();
-        String code = server.arg("code");
-        
-        if (!_simMgr) {
-            server.send(500, "application/json", "{\"error\":\"No SIM manager\"}");
-            return;
-        }
-
-        const SimSlotState* s = _simMgr->getSlot(slot);
-        if (!s || !s->modem || !s->modem->isReady()) {
-            server.send(400, "application/json", "{\"error\":\"Invalid slot or modem not ready\"}");
-            return;
-        }
-
-        LOG_I(TAG, "Interactive USSD on slot %d: %s", slot, code.c_str());
-        String resp = s->modem->sendUSSD(code);
-        
-        JsonDocument doc;
-        doc["response"] = resp;
-        String json;
-        serializeJson(doc, json);
-        server.send(200, "application/json", json);
-    }
-
-    // ─── POST /api/send-sms (Interactive Test) ───────────────────────────
-    static void handleApiSendSms() {
-        if (!server.hasArg("slot") || !server.hasArg("phone") || !server.hasArg("message")) {
-            server.send(400, "application/json", "{\"error\":\"Missing slot, phone, or message\"}");
-            return;
-        }
-        uint8_t slot = server.arg("slot").toInt();
-        String phone = server.arg("phone");
-        String message = server.arg("message");
-        
-        if (!_simMgr) {
-            server.send(500, "application/json", "{\"error\":\"No SIM manager\"}");
-            return;
-        }
-
-        const SimSlotState* s = _simMgr->getSlot(slot);
-        if (!s || !s->modem || !s->modem->isReady()) {
-            server.send(400, "application/json", "{\"error\":\"Invalid slot or modem not ready\"}");
-            return;
-        }
-
-        LOG_I(TAG, "Interactive SMS send on slot %d to %s", slot, phone.c_str());
-        SmsSendResult sendRes;
-        
-        if (message.length() > SMS_PART_LENGTH) {
-            sendRes.success = s->modem->sendMultipartSMS(phone, message);
-            sendRes.messageRef = 0; // Multipart DLR mapping is complex, simplify for testing
-        } else {
-            sendRes = s->modem->sendSMS(phone, message);
-        }
-        
-        JsonDocument doc;
-        doc["success"] = sendRes.success;
-        if (sendRes.success) {
-            doc["reference"] = sendRes.messageRef;
-        } else {
-            doc["error"] = sendRes.errorMsg;
-        }
-        
-        String json;
-        serializeJson(doc, json);
-        server.send(200, "application/json", json);
-    }
-
-    // ─── POST /api/restart ───────────────────────────────────────────────
-    static void handleApiRestart() {
-        server.send(200, "application/json", "{\"ok\":true,\"message\":\"Restarting...\"}");
-        delay(500);
-        ESP.restart();
-    }
-
-    // ─── POST /api/factory-reset ─────────────────────────────────────────
-    static void handleApiFactoryReset() {
-        server.send(200, "application/json", "{\"ok\":true,\"message\":\"Factory resetting...\"}");
-        LOG_W(TAG, "FACTORY RESET triggered via web dashboard!");
-        Storage::factoryReset();
-        delay(500);
-        ESP.restart();
-    }
-
-    // ─── POST /api/unflag-sim?slot=N ─────────────────────────────────────
-    static void handleApiUnflagSim() {
-        if (server.hasArg("slot") && _simMgr) {
-            uint8_t slot = server.arg("slot").toInt();
-            _simMgr->unflag(slot);
-            LOG_I(TAG, "SIM slot %d unflagged via web dashboard", slot);
-            server.send(200, "application/json", "{\"ok\":true}");
-        } else {
-            server.send(400, "application/json", "{\"error\":\"Missing slot parameter\"}");
-        }
-    }
-
     // ─── Lifecycle ───────────────────────────────────────────────────────
     void begin(SimManager *simMgr, DeviceConfig *cfg, DeviceStats *stats) {
         _simMgr = simMgr;
@@ -432,12 +254,6 @@ async function sendSms() {
 
         server.on("/", HTTP_GET, handleRoot);
         server.on("/api/status", HTTP_GET, handleApiStatus);
-        server.on("/api/ussd", HTTP_POST, handleApiUssd);
-        server.on("/api/send-sms", HTTP_POST, handleApiSendSms);
-        server.on("/api/restart", HTTP_POST, handleApiRestart);
-        server.on("/api/factory-reset", HTTP_POST, handleApiFactoryReset);
-        server.on("/api/unflag-sim", HTTP_POST, handleApiUnflagSim);
-
         server.begin();
         running = true;
         LOG_I(TAG, "Web dashboard started on port %d", WEB_DASHBOARD_PORT);

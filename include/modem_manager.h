@@ -4,6 +4,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include "config.h"
 #include <vector>
 
 // Result of an AT command

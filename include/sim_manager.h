@@ -4,6 +4,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include "config.h"
 #include "modem_manager.h"
 #include <vector>

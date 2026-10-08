@@ -4,6 +4,7 @@
 
 #include "sms_engine.h"
 #include "config.h"
+#include "led_status.h"
 #include <time.h>
 
 static const char *TAG = "SMS_ENG";
@@ -50,20 +51,9 @@ void SmsEngine::processSendQueue() {
         if (sendJob(job)) {
             _jobQueue.erase(_jobQueue.begin());
         } else {
-            // Move to back of queue for retry
-            job.retryCount++;
-            job.assignedSim = -1; // Try different SIM next time
-            if (job.retryCount >= MAX_AT_RETRIES) {
-                LOG_E(TAG, "Job %s exceeded max retries, failing", job.attemptId.c_str());
-                ApiClient::reportResult(job.attemptId, "FAILED", false, simSlot,
-                                        "MAX_RETRIES", "Exceeded maximum send attempts");
-                _failCount++;
-                _jobQueue.erase(_jobQueue.begin());
-            } else {
-                SmsJob retryJob = job;
-                _jobQueue.erase(_jobQueue.begin());
-                _jobQueue.push_back(retryJob);
-            }
+            // The API owns message retry policy and issues a new attempt ID.
+            // Reusing this attempt locally can duplicate sends and corrupt delivery history.
+            _jobQueue.erase(_jobQueue.begin());
             break; // Back off after failure
         }
     }
@@ -71,10 +61,18 @@ void SmsEngine::processSendQueue() {
 
 bool SmsEngine::sendJob(SmsJob &job) {
     int8_t simSlot = _simMgr.selectBestSim();
-    if (simSlot < 0) return false;
+    if (simSlot < 0) {
+        ApiClient::reportResult(job.attemptId, "FAILED", false, -1,
+                                "NO_SERVICE", "No usable SIM is available");
+        return false;
+    }
 
     const SimSlotState *slot = _simMgr.getSlot(simSlot);
-    if (!slot || !slot->modem) return false;
+    if (!slot || !slot->modem) {
+        ApiClient::reportResult(job.attemptId, "FAILED", false, simSlot,
+                                "MODEM_NOT_READY", "The selected modem is not ready");
+        return false;
+    }
 
     LOG_I(TAG, "Sending SMS to %s via SIM %d (attempt #%d)",
           job.phone.c_str(), simSlot, job.retryCount + 1);

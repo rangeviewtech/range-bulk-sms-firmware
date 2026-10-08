@@ -234,7 +234,9 @@ static void syncLoop() {
     SimManager::UrcEvents events = g_simMgr.processAllURCs();
 
     // Handle delivery reports
-    for (const auto &[slot, report] : events.deliveryReports) {
+    for (const auto &event : events.deliveryReports) {
+        const uint8_t slot = event.first;
+        const DeliveryReport &report = event.second;
         g_smsEngine->processDeliveryReport(slot, report);
         if (report.delivered) {
             g_stats.totalDelivered++;
@@ -242,9 +244,12 @@ static void syncLoop() {
     }
 
     // Handle incoming SMS
-    for (const auto &[slot, sms] : events.incomingSms) {
-        LOG_I(TAG, "Incoming SMS from %s on SIM %d: %s",
-              sms.from.c_str(), slot, sms.message.c_str());
+    for (const auto &event : events.incomingSms) {
+        const uint8_t slot = event.first;
+        const IncomingSms &sms = event.second;
+        // Incoming bodies and sender numbers can contain sensitive data such
+        // as OTPs; never write them to the serial log.
+        LOG_I(TAG, "Incoming SMS received on SIM %d", slot);
         ApiClient::reportIncoming(sms.from, sms.to, sms.message,
                                   sms.timestamp, slot);
         g_stats.totalIncoming++;

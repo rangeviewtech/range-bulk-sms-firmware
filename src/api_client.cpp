@@ -50,7 +50,9 @@ static int httpRequest(const String &method, const String &path,
     HTTPClient http;
     String url = _baseUrl + path;
 
-    LOG_D(TAG, "%s %s", method.c_str(), url.c_str());
+    // Do not echo the configured API origin (which may contain accidental
+    // credentials or query parameters) to serial logs.
+    LOG_D(TAG, "%s %s", method.c_str(), path.c_str());
 
     if (!beginVerifiedHttp(http, url, _rootCa)) {
         LOG_E(TAG, "Verified HTTPS connection could not be initialized");
@@ -91,7 +93,7 @@ static int httpRequest(const String &method, const String &path,
         
         JsonDocument resDoc;
         DeserializationError err = deserializeJson(resDoc, rawResponse);
-        if (!err && resDoc.containsKey("e2ee") && !_authToken.isEmpty() && _authToken.startsWith("gt_")) {
+        if (!err && resDoc["e2ee"].is<const char*>() && !_authToken.isEmpty() && _authToken.startsWith("gt_")) {
             String secret = _authToken.substring(3);
             String decrypted = CryptoUtils::decryptE2EE(resDoc["e2ee"].as<String>(), secret);
             if (!decrypted.isEmpty()) {

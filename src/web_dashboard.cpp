@@ -21,6 +21,25 @@ namespace WebDashboard {
     static DeviceStats* _stats = nullptr;
     static bool running = false;
 
+    // Values reported by WiFi and modem firmware are untrusted text. Keep
+    // those values as text in the local dashboard rather than allowing HTML
+    // markup or script injection on the unauthenticated device network.
+    static String escapeHtml(const String &value) {
+        String escaped;
+        escaped.reserve(value.length());
+        for (size_t i = 0; i < value.length(); i++) {
+            switch (value.charAt(i)) {
+                case '&': escaped += "&amp;"; break;
+                case '<': escaped += "&lt;"; break;
+                case '>': escaped += "&gt;"; break;
+                case '\"': escaped += "&quot;"; break;
+                case '\'': escaped += "&#39;"; break;
+                default: escaped += value.charAt(i); break;
+            }
+        }
+        return escaped;
+    }
+
     // ─── Helper: Health to color + label ──────────────────────────────────
     static String healthBadge(SimHealth h) {
         switch (h) {
@@ -124,11 +143,9 @@ input, select { background: #162550; color: white; border: 1px solid #4a5f8f; pa
         // ─── Connectivity Card ───────────────────────────────────────────
         html += "<div class='grid'><div class='card'><h2>🌐 Connectivity</h2>";
         html += "<div class='row'><span class='label'>Method</span><span class='value'>WiFi</span></div>";
-        html += "<div class='row'><span class='label'>SSID</span><span class='value'>" + WiFi.SSID() + "</span></div>";
+        html += "<div class='row'><span class='label'>Network</span><span class='value'>Connected</span></div>";
         html += "<div class='row'><span class='label'>Signal</span><span class='value'>" + String(WiFi.RSSI()) + " dBm</span></div>";
-        html += "<div class='row'><span class='label'>IP Address</span><span class='value'>" + WiFi.localIP().toString() + "</span></div>";
-        html += "<div class='row'><span class='label'>MAC</span><span class='value' style='font-size:11px'>" + WiFi.macAddress() + "</span></div>";
-        html += "<div class='row'><span class='label'>API Server</span><span class='value' style='font-size:11px'>" + _cfg->apiBase + "</span></div>";
+        html += "<div class='row'><span class='label'>IP Address</span><span class='value'>" + escapeHtml(WiFi.localIP().toString()) + "</span></div>";
         html += "</div>";
 
         // ─── Stats Card ─────────────────────────────────────────────────
@@ -146,7 +163,7 @@ input, select { background: #162550; color: white; border: 1px solid #4a5f8f; pa
         if (_simMgr && _simMgr->getSlotCount() > 0) {
             html += "<div style='overflow-x:auto'><table><tr>";
             html += "<th>Slot</th><th>Operator</th><th>Network</th><th>Signal</th><th>Bars</th>";
-            html += "<th>Status</th><th>Health</th><th>IMEI</th><th>Phone</th><th>Balance</th>";
+            html += "<th>Status</th><th>Health</th>";
             html += "<th>Sent</th><th>Failed</th><th>Delivered</th><th>Action</th></tr>";
 
             for (uint8_t i = 0; i < _simMgr->getSlotCount(); i++) {
@@ -154,15 +171,12 @@ input, select { background: #162550; color: white; border: 1px solid #4a5f8f; pa
                 if (!slot) continue;
                 html += "<tr>";
                 html += "<td style='font-weight:700;color:#FBCA07'>" + String(i) + "</td>";
-                html += "<td style='font-weight:600'>" + slot->info.operatorName + "</td>";
-                html += "<td>" + slot->info.networkType + "</td>";
+                html += "<td style='font-weight:600'>" + escapeHtml(slot->info.operatorName) + "</td>";
+                html += "<td>" + escapeHtml(slot->info.networkType) + "</td>";
                 html += "<td>" + String(slot->info.signalDbm) + " dBm</td>";
                 html += "<td>" + signalBarsVisual(slot->info.signalBars) + "</td>";
-                html += "<td style='font-size:11px'>" + slot->info.registrationStatus + "</td>";
+                html += "<td style='font-size:11px'>" + escapeHtml(slot->info.registrationStatus) + "</td>";
                 html += "<td>" + healthBadge(slot->health) + "</td>";
-                html += "<td style='font-size:11px'>" + slot->info.imei + "</td>";
-                html += "<td style='font-size:11px'>" + slot->info.phoneNumber + "</td>";
-                html += "<td>" + slot->info.ussdBalance + "</td>";
                 html += "<td>" + String(slot->totalSent) + "</td>";
                 html += "<td>" + String(slot->totalFailed) + "</td>";
                 html += "<td>" + String(slot->totalDelivered) + "</td>";
@@ -206,10 +220,8 @@ setTimeout(() => location.reload(), 30000);
         doc["batteryVoltage"] = PowerMonitor::getBatteryVoltage();
         doc["batteryPercent"] = PowerMonitor::getBatteryPercent();
         doc["isCharging"] = PowerMonitor::isCharging();
-        doc["wifiSSID"] = WiFi.SSID();
         doc["wifiRSSI"] = WiFi.RSSI();
         doc["ip"] = WiFi.localIP().toString();
-        doc["mac"] = WiFi.macAddress();
         doc["paired"] = _cfg->paired;
 
         if (_simMgr) {
@@ -225,9 +237,6 @@ setTimeout(() => location.reload(), 30000);
                 obj["signalDbm"] = s->info.signalDbm;
                 obj["bars"] = s->info.signalBars;
                 obj["health"] = (int)s->health;
-                obj["imei"] = s->info.imei;
-                obj["phone"] = s->info.phoneNumber;
-                obj["balance"] = s->info.ussdBalance;
                 obj["sent"] = s->totalSent;
                 obj["failed"] = s->totalFailed;
                 obj["delivered"] = s->totalDelivered;

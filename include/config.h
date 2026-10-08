@@ -123,6 +123,11 @@
 
 // ─── OTA ────────────────────────────────────────────────────────────────────
 #define OTA_HOSTNAME_PREFIX "rangegw-"
+// Local ArduinoOTA is disabled unless a 32-character MD5 password hash is
+// supplied by the trusted build environment. Never commit the hash here.
+#ifndef OTA_PASSWORD_HASH
+#define OTA_PASSWORD_HASH ""
+#endif
 
 // ─── Log Levels ─────────────────────────────────────────────────────────────
 enum LogLevel : uint8_t {

@@ -13,11 +13,27 @@
 
 static const char *TAG = "OTA";
 static bool _updating = false;
+static bool _localOtaEnabled = false;
 
 namespace OtaUpdater {
 
 void begin(const String &hostname) {
+    String passwordHash = OTA_PASSWORD_HASH;
+    if (passwordHash.length() != 32) {
+        LOG_W(TAG, "Local ArduinoOTA disabled; configure a 32-character password hash in the trusted build environment");
+        return;
+    }
+    for (size_t i = 0; i < passwordHash.length(); i++) {
+        const char c = passwordHash.charAt(i);
+        const bool isHex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        if (!isHex) {
+            LOG_W(TAG, "Local ArduinoOTA disabled; configured password hash is invalid");
+            return;
+        }
+    }
+
     ArduinoOTA.setHostname(hostname.c_str());
+    ArduinoOTA.setPasswordHash(passwordHash.c_str());
 
     ArduinoOTA.onStart([]() {
         _updating = true;
@@ -55,11 +71,12 @@ void begin(const String &hostname) {
     });
 
     ArduinoOTA.begin();
+    _localOtaEnabled = true;
     LOG_I(TAG, "Local OTA ready. Hostname: %s", hostname.c_str());
 }
 
 void handle() {
-    ArduinoOTA.handle();
+    if (_localOtaEnabled) ArduinoOTA.handle();
 }
 
 bool isUpdating() {
@@ -70,7 +87,7 @@ bool checkAndPerformWebUpdate(const String &apiBase, const String &token, const 
     if (apiBase.isEmpty() || token.isEmpty() || rootCa.isEmpty() || !apiBase.startsWith("https://")) return false;
 
     String url = apiBase + API_FIRMWARE_CHECK;
-    LOG_I(TAG, "Checking for Internet FOTA at: %s", url.c_str());
+    LOG_I(TAG, "Checking for Internet FOTA at configured backend endpoint");
 
     HTTPClient http;
     if (!http.begin(url, rootCa.c_str())) {
@@ -105,7 +122,7 @@ bool checkAndPerformWebUpdate(const String &apiBase, const String &token, const 
         return false;
     }
 
-    if (doc.containsKey("e2ee") && token.startsWith("gt_")) {
+    if (doc["e2ee"].is<const char*>() && token.startsWith("gt_")) {
         String secret = token.substring(3);
         String decrypted = CryptoUtils::decryptE2EE(doc["e2ee"].as<String>(), secret);
         if (!decrypted.isEmpty()) {

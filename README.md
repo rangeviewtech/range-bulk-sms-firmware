@@ -87,9 +87,9 @@ Production-grade ESP32 firmware that transforms an ESP32 microcontroller into a 
 - Full HTML dashboard at `http://device-ip/`
 - **System card**: Firmware, uptime, heap, CPU temp, reset reason
 - **Power card**: Source, voltage, battery %, charging status
-- **Connectivity card**: WiFi SSID, signal, IP, MAC, API server
+- **Connectivity card**: connection state, signal, and local IP; network identifiers and the configured API URL are omitted
 - **Statistics card**: Sent, Delivered, Failed, Incoming counts
-- **SIM card table**: Operator, Network Type (GSM/3G/LTE), Signal Bars (▊▊▊▊▊), Health badge, IMEI, phone, balance, per-SIM send/fail/deliver counts
+- **SIM card table**: Operator, Network Type (GSM/3G/LTE), Signal Bars (▊▊▊▊▊), Health badge, and per-SIM send/fail/deliver counts; subscriber identifiers and balances are omitted from the unauthenticated local dashboard
 - **Read-only status dashboard**: Messaging, SIM recovery, and account actions are managed by the authenticated Range API. Factory reset requires the physical BOOT button.
 - JSON API at `/api/status`
 - Auto-refresh every 30 seconds
@@ -131,7 +131,7 @@ Rich JSON payload sent to backend every 60 seconds:
 ### System Reliability
 - Hardware watchdog timer (30s)
 - Persistent config, queue, and SIM state (LittleFS)
-- OTA firmware updates via ArduinoOTA
+- Local ArduinoOTA is disabled by default and only enabled when a valid password hash is supplied by the trusted build environment; backend FOTA remains disabled until a real HTTPS artifact is configured
 - Low-memory alerts and heap monitoring
 - LED status indicators for visual feedback
 - Incoming call rejection (`ATH`)
@@ -255,6 +255,9 @@ attempts, status aggregation, and retry decisions. Firmware owns modem
 communication and device-level behavior; it performs low-level AT command
 retries, reports one attempt outcome, and waits for the API to issue a new
 attempt ID before sending again. Uncertain sends are not automatically retried.
+
+Local ArduinoOTA is disabled unless the trusted build environment supplies a+32-character MD5 password hash through `OTA_PASSWORD_HASH` at compile time.+Keep that build setting out of source control and use a unique, strong OTA+password for the deployment. Internet FOTA remains separately gated by the
+backend firmware version and HTTPS artifact URL.
 
 ## 📊 LED Status Indicators
 
